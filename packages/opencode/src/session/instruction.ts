@@ -161,6 +161,8 @@ export const layer: Layer.Layer<
     })
 
     const system = Effect.fn("Instruction.system")(function* () {
+      if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION && _cachedSystem) return _cachedSystem
+
       const config = yield* cfg.get()
       const urls = (config.instructions ?? []).filter(
         (item) => item.startsWith("https://") || item.startsWith("http://"),
@@ -177,7 +179,7 @@ export const layer: Layer.Layer<
         Effect.forEach(Array.from(project), read, { concurrency: 8 }),
       ])
 
-      return {
+      const result = {
         global: Array.from(global).flatMap((item, i) =>
           globalFiles[i] ? [`Instructions from: ${item}\n${globalFiles[i]}`] : [],
         ),
@@ -188,6 +190,9 @@ export const layer: Layer.Layer<
           ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
         ],
       }
+
+      if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION) _cachedSystem = result
+      return result
     })
 
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
@@ -253,6 +258,12 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+let _cachedSystem: { global: string[]; project: string[] } | undefined
+
+export function clearCache() {
+  _cachedSystem = undefined
+}
 
 export function loaded(messages: MessageV2.WithParts[]) {
   return extract(messages)
