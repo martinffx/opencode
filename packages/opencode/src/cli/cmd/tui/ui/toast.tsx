@@ -1,16 +1,21 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
+import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
-import z from "zod"
+import { Schema } from "effect"
 import { TuiEvent } from "../event"
 
-export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
+type ToastInput = Schema.Codec.Encoded<typeof TuiEvent.ToastShow.properties>
+export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>
+
+const decodeToastOptions = Schema.decodeUnknownSync(TuiEvent.ToastShow.properties)
 
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
 
   return (
     <Show when={toast.currentToast}>
@@ -21,6 +26,7 @@ export function Toast() {
           alignItems="flex-start"
           top={2}
           right={2}
+          maxWidth={Math.min(60, dimensions().width - 6)}
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}
@@ -31,11 +37,13 @@ export function Toast() {
           customBorderChars={SplitBorder.customBorderChars}
         >
           <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1}>
+            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
               {current().title}
             </text>
           </Show>
-          <text>{current().message}</text>
+          <text fg={theme.text} wrapMode="word" width="100%">
+            {current().message}
+          </text>
         </box>
       )}
     </Show>
@@ -50,14 +58,13 @@ function init() {
   let timeoutHandle: NodeJS.Timeout | null = null
 
   const toast = {
-    show(options: ToastOptions) {
-      const parsedOptions = TuiEvent.ToastShow.properties.parse(options)
-      const { duration, ...currentToast } = parsedOptions
-      setStore("currentToast", currentToast)
+    show(options: ToastInput) {
+      const toastOptions = decodeToastOptions(options)
+      setStore("currentToast", toastOptions)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
         setStore("currentToast", null)
-      }, duration).unref()
+      }, toastOptions.duration).unref()
     },
     error: (err: any) => {
       if (err instanceof Error)

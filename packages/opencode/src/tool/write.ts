@@ -1,88 +1,104 @@
-import z from "zod"
+import { Schema } from "effect"
 import * as path from "path"
-import { Tool } from "./tool"
-import { LSP } from "../lsp"
-import { Permission } from "../permission"
+import { Effect } from "effect"
+import * as Tool from "./tool"
+import { LSP } from "@/lsp/lsp"
+import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
-import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
-import { Instance } from "../project/instance"
-import { Agent } from "../agent/agent"
+import { FileWatcher } from "../file/watcher"
+import { Format } from "../format"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { InstanceState } from "@/effect/instance-state"
+import { trimDiff } from "./edit"
+import { assertExternalDirectoryEffect } from "./external-directory"
+import * as Bom from "@/util/bom"
 
-export const WriteTool = Tool.define("write", {
-  description: DESCRIPTION,
-  parameters: z.object({
-    content: z.string().describe("The content to write to the file"),
-    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
+const MAX_PROJECT_DIAGNOSTICS_FILES = 5
+
+export const Parameters = Schema.Struct({
+  content: Schema.String.annotate({ description: "The content to write to the file" }),
+  filePath: Schema.String.annotate({
+    description: "The absolute path to the file to write (must be absolute, not relative)",
   }),
-  async execute(params, ctx) {
-    const agent = await Agent.get(ctx.agent)
+})
 
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filepath)) {
-      const parentDir = path.dirname(filepath)
-      if (agent.permission.external_directory === "ask") {
-        await Permission.ask({
-          type: "external_directory",
-          pattern: parentDir,
-          sessionID: ctx.sessionID,
-          messageID: ctx.messageID,
-          callID: ctx.callID,
-          title: `Write file outside working directory: ${filepath}`,
-          metadata: {
-            filepath,
-            parentDir,
-          },
-        })
-      }
-    }
-
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-    if (exists) await FileTime.assert(ctx.sessionID, filepath)
-
-    if (agent.permission.edit === "ask")
-      await Permission.ask({
-        type: "write",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: exists ? "Overwrite this file: " + filepath : "Create new file: " + filepath,
-        metadata: {
-          filePath: filepath,
-          content: params.content,
-          exists,
-        },
-      })
-
-    await Bun.write(filepath, params.content)
-    await Bus.publish(File.Event.Edited, {
-      file: filepath,
-    })
-    FileTime.read(ctx.sessionID, filepath)
-
-    let output = ""
-    await LSP.touchFile(filepath, true)
-    const diagnostics = await LSP.diagnostics()
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      if (issues.length === 0) continue
-      if (file === filepath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
-        continue
-      }
-      output += `\n<project_diagnostics>\n${file}\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</project_diagnostics>\n`
-    }
+export const WriteTool = Tool.define(
+  "write",
+  Effect.gen(function* () {
+    const lsp = yield* LSP.Service
+    const fs = yield* AppFileSystem.Service
+    const bus = yield* Bus.Service
+    const format = yield* Format.Service
 
     return {
-      title: path.relative(Instance.worktree, filepath),
-      metadata: {
-        diagnostics,
-        filepath,
-        exists: exists,
-      },
-      output,
+      description: DESCRIPTION,
+      parameters: Parameters,
+      execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const instance = yield* InstanceState.context
+          const filepath = path.isAbsolute(params.filePath)
+            ? params.filePath
+            : path.join(instance.directory, params.filePath)
+          yield* assertExternalDirectoryEffect(ctx, filepath)
+
+          const exists = yield* fs.existsSafe(filepath)
+          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
+          const next = Bom.split(params.content)
+          const desiredBom = source.bom || next.bom
+          const contentOld = source.text
+          const contentNew = next.text
+
+          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
+          yield* ctx.ask({
+            permission: "edit",
+            patterns: [path.relative(instance.worktree, filepath)],
+            always: ["*"],
+            metadata: {
+              filepath,
+              diff,
+            },
+          })
+
+          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          if (yield* format.file(filepath)) {
+            yield* Bom.syncFile(fs, filepath, desiredBom)
+          }
+          yield* bus.publish(File.Event.Edited, { file: filepath })
+          yield* bus.publish(FileWatcher.Event.Updated, {
+            file: filepath,
+            event: exists ? "change" : "add",
+          })
+
+          let output = "Wrote file successfully."
+          yield* lsp.touchFile(filepath, "document")
+          const diagnostics = yield* lsp.diagnostics()
+          const normalizedFilepath = AppFileSystem.normalizePath(filepath)
+          let projectDiagnosticsCount = 0
+          for (const [file, issues] of Object.entries(diagnostics)) {
+            const current = file === normalizedFilepath
+            if (!current && projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
+            const block = LSP.Diagnostic.report(current ? filepath : file, issues)
+            if (!block) continue
+            if (current) {
+              output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+              continue
+            }
+            projectDiagnosticsCount++
+            output += `\n\nLSP errors detected in other files:\n${block}`
+          }
+
+          return {
+            title: path.relative(instance.worktree, filepath),
+            metadata: {
+              diagnostics,
+              filepath,
+              exists: exists,
+            },
+            output,
+          }
+        }).pipe(Effect.orDie),
     }
-  },
-})
+  }),
+)

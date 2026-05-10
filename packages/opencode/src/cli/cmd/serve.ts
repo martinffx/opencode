@@ -1,31 +1,24 @@
+import { Effect } from "effect"
 import { Server } from "../../server/server"
-import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
+import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
-export const ServeCommand = cmd({
+export const ServeCommand = effectCmd({
   command: "serve",
-  builder: (yargs) =>
-    yargs
-      .option("port", {
-        alias: ["p"],
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
-      }),
+  builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
-  handler: async (args) => {
-    const hostname = args.hostname
-    const port = args.port
-    const server = Server.listen({
-      port,
-      hostname,
-    })
+  // Server loads instances per-request via x-opencode-directory header — no
+  // need for an ambient project InstanceContext at startup.
+  instance: false,
+  handler: Effect.fn("Cli.serve")(function* (args) {
+    if (!Flag.OPENCODE_SERVER_PASSWORD) {
+      console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+    }
+    const opts = yield* resolveNetworkOptions(args)
+    const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
-    await new Promise(() => {})
-    await server.stop()
-  },
+
+    yield* Effect.never
+  }),
 })

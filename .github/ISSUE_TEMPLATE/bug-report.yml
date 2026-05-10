@@ -1,6 +1,5 @@
 name: Bug report
 description: Report an issue that should be fixed
-labels: ["bug"]
 body:
   - type: textarea
     id: description
@@ -10,6 +9,14 @@ body:
       placeholder: What happened?
     validations:
       required: true
+
+  - type: input
+    id: plugins
+    attributes:
+      label: Plugins
+      description: What plugins are you using?
+    validations:
+      required: false
 
   - type: input
     id: opencode-version

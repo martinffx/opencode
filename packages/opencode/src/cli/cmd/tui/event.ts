@@ -1,13 +1,17 @@
-import { Bus } from "@/bus"
-import z from "zod"
+import { BusEvent } from "@/bus/bus-event"
+import { SessionID } from "@/session/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
+import { Effect, Schema } from "effect"
+
+const DEFAULT_TOAST_DURATION = 5000
 
 export const TuiEvent = {
-  PromptAppend: Bus.event("tui.prompt.append", z.object({ text: z.string() })),
-  CommandExecute: Bus.event(
+  PromptAppend: BusEvent.define("tui.prompt.append", Schema.Struct({ text: Schema.String })),
+  CommandExecute: BusEvent.define(
     "tui.command.execute",
-    z.object({
-      command: z.union([
-        z.enum([
+    Schema.Struct({
+      command: Schema.Union([
+        Schema.Literals([
           "session.list",
           "session.new",
           "session.share",
@@ -15,6 +19,8 @@ export const TuiEvent = {
           "session.compact",
           "session.page.up",
           "session.page.down",
+          "session.line.up",
+          "session.line.down",
           "session.half.page.up",
           "session.half.page.down",
           "session.first",
@@ -23,17 +29,25 @@ export const TuiEvent = {
           "prompt.submit",
           "agent.cycle",
         ]),
-        z.string(),
+        Schema.String,
       ]),
     }),
   ),
-  ToastShow: Bus.event(
+  ToastShow: BusEvent.define(
     "tui.toast.show",
-    z.object({
-      title: z.string().optional(),
-      message: z.string(),
-      variant: z.enum(["info", "success", "warning", "error"]),
-      duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      message: Schema.String,
+      variant: Schema.Literals(["info", "success", "warning", "error"]),
+      duration: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
+        description: "Duration in milliseconds",
+      }),
+    }),
+  ),
+  SessionSelect: BusEvent.define(
+    "tui.session.select",
+    Schema.Struct({
+      sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
     }),
   ),
 }

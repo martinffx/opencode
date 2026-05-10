@@ -2,29 +2,32 @@
 
 import { $ } from "bun"
 import path from "path"
+import os from "os"
 import { ZenData } from "../src/model"
 
 const stage = process.argv[2]
 if (!stage) throw new Error("Stage is required")
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
+const PARTS = 30
 
 // read the secret
-const ret = await $`bun sst secret list`.cwd(root).text()
-const value1 = ret
-  .split("\n")
-  .find((line) => line.startsWith("ZEN_MODELS1"))
-  ?.split("=")[1]
-const value2 = ret
-  .split("\n")
-  .find((line) => line.startsWith("ZEN_MODELS2"))
-  ?.split("=")[1]
-if (!value1) throw new Error("ZEN_MODELS1 not found")
-if (!value2) throw new Error("ZEN_MODELS2 not found")
+const ret = await $`bun sst secret list --stage frank`.cwd(root).text()
+const lines = ret.split("\n")
+const values = Array.from({ length: PARTS }, (_, i) => {
+  const value = lines
+    .find((line) => line.startsWith(`ZEN_MODELS${i + 1}=`))
+    ?.split("=")
+    .slice(1)
+    .join("=")
+  if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
+  return value
+})
 
 // validate value
-ZenData.validate(JSON.parse(value1 + value2))
+ZenData.validate(JSON.parse(values.join("")))
 
 // update the secret
-await $`bun sst secret set ZEN_MODELS1 ${value1} --stage ${stage}`
-await $`bun sst secret set ZEN_MODELS2 ${value2} --stage ${stage}`
+const envFile = Bun.file(path.join(os.tmpdir(), `models-${Date.now()}.env`))
+await envFile.write(values.map((v, i) => `ZEN_MODELS${i + 1}="${v.replace(/"/g, '\\"')}"`).join("\n"))
+await $`bun sst secret load ${envFile.name} --stage ${stage}`.cwd(root)
