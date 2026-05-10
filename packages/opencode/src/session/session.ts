@@ -419,6 +419,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 
   const contextTokens = inputTokens
+  const rawInputTokens = inputTokens
   const costInfo =
     input.model.cost?.tiers
       ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
@@ -439,6 +440,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
         .toNumber(),
     ),
     tokens,
+    rawInputTokens,
   }
 }
 
