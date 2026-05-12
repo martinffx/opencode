@@ -1425,10 +1425,10 @@ export const layer = Layer.effect(
             ])
             const system: string[] | { stable: string[]; dynamic: string[] } = Flag.OPENCODE_EXPERIMENTAL_SYSTEM_PROMPT_SPLIT
               ? {
-                  stable: [...instructions.global],
-                  dynamic: [...env, ...instructions.project, ...(skills ? [skills] : [])],
+                  stable: [...instructions.global, ...(skills.global ? [skills.global] : [])],
+                  dynamic: [...env, ...(skills.project ? [skills.project] : []), ...instructions.project],
                 }
-              : [...env, ...instructions.global, ...instructions.project, ...(skills ? [skills] : [])]
+              : [...env, ...instructions.global, ...(skills.global ? [skills.global] : []), ...instructions.project, ...(skills.project ? [skills.project] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") {
               if (Array.isArray(system)) system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
