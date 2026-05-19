@@ -2190,10 +2190,10 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-split-system")
         const agent = {
           name: "test",
@@ -2211,15 +2211,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: { stable: ["Global instructions"], dynamic: ["Project instructions"] },
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        })
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: { stable: ["Global instructions"], dynamic: ["Project instructions"] },
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
@@ -2296,10 +2299,10 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-flat-system")
         const agent = {
           name: "test",
@@ -2317,15 +2320,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["Combined instructions"],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        })
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["Combined instructions"],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
