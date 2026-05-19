@@ -560,7 +560,7 @@ export const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
-            if (Flag.OPENCODE_EXPERIMENTAL_CACHE_AUDIT) {
+            if (Flag.OPENCODE_EXPERIMENTAL_CACHE) {
               const totalInputTokens = usage.rawInputTokens
               const cacheHitPercent = totalInputTokens > 0 ? ((usage.tokens.cache.read / totalInputTokens) * 100).toFixed(1) : "0.0"
               slog.info(

@@ -1,0 +1,314 @@
+{
+  "feature": "prompt-cache-stacking",
+  "spec": "docs/specs/2026-05-10-prompt-cache-stacking/spec.md",
+  "goal": "Split the prompt-caching PR into 5 stacked PRs with manual re-application onto current dev",
+  "phases": [
+    {
+      "id": "P1",
+      "name": "Setup",
+      "tasks": [
+        {
+          "id": "T0",
+          "name": "Verify dev branch is up to date",
+          "depends_on": [],
+          "files": { "create": [], "modify": [] },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Checkout dev and pull latest from upstream",
+              "command": "cd /Users/martinrichards/code/opencode && git checkout dev && git pull upstream dev",
+              "expected": "Already up to date or fast-forward merge"
+            },
+            {
+              "action": "bash",
+              "description": "Confirm clean working tree",
+              "command": "git status",
+              "expected": "nothing to commit, working tree clean"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "PR-1: Cache Audit Logging",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "Manually apply cache audit changes to processor.ts and sidebar plugin",
+          "depends_on": ["T0"],
+          "files": {
+            "create": [],
+            "modify": [
+              "packages/opencode/src/session/processor.ts",
+              "packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx"
+            ]
+          },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Reset worktree to clean dev",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-1-cache-audit && git checkout -f dev && git clean -fd",
+              "expected": "Clean worktree"
+            },
+            {
+              "action": "implement",
+              "description": "Add [CACHE] log line after Session.getUsage() in processor.ts",
+              "file": "packages/opencode/src/session/processor.ts",
+              "code": "if (process.env['OPENCODE_CACHE_AUDIT']) {\n  const totalInputTokens = usage.tokens.input + usage.tokens.cache.read + usage.tokens.cache.write\n  const cacheHitPercent = totalInputTokens > 0 ? ((usage.tokens.cache.read / totalInputTokens) * 100).toFixed(1) : '0.0'\n  log.info(\n    `[CACHE] ${ctx.model.id}  input=${totalInputTokens} (cache_read=${usage.tokens.cache.read} cache_write=${usage.tokens.cache.write} new=${usage.tokens.input})  hit=${cacheHitPercent}%  output=${usage.tokens.output}  total=${usage.tokens.total ?? 0}`,\n  )\n}"
+            },
+            {
+              "action": "implement",
+              "description": "Add cache audit display to sidebar context plugin",
+              "file": "packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx",
+              "code": "<Show when={process.env['OPENCODE_CACHE_AUDIT'] && state().cacheHitPercent != null}>\n  <box>\n    <text fg={theme().text}><b>Cache Audit</b></text>\n    <text fg={theme().textMuted}>{state().cacheInput.toLocaleString()} input tokens</text>\n    <text fg={theme().textMuted}>  {state().cacheNew.toLocaleString()} new</text>\n    <text fg={theme().textMuted}>  {state().cacheRead.toLocaleString()} cache read</text>\n    <text fg={theme().textMuted}>  {state().cacheWrite.toLocaleString()} cache write</text>\n    <text fg={theme().textMuted}>{state().cacheHitPercent}% hit rate</text>\n    <text fg={theme().textMuted}>{state().cacheOutput.toLocaleString()} output tokens</text>\n  </box>\n</Show>"
+            },
+            {
+              "action": "bash",
+              "description": "Run tests",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-1-cache-audit/packages/opencode && bun test",
+              "expected": "Tests pass"
+            },
+            {
+              "action": "bash",
+              "description": "Commit with co-author attribution",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-1-cache-audit && git add -A && git commit -m 'feat(cache): add cache token audit logging and TUI sidebar behind OPENCODE_CACHE_AUDIT' --author='Bhagirathsinh Vaghela <bhagirathsinh.vaghela.001@gmail.com>'",
+              "expected": "Commit created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "PR-2: Bash Tool Schema Test",
+      "tasks": [
+        {
+          "id": "T2",
+          "name": "Add schema stability test to shell.test.ts",
+          "depends_on": ["T0"],
+          "files": {
+            "create": [],
+            "modify": ["packages/opencode/test/tool/shell.test.ts"]
+          },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Reset worktree to clean dev",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-2-bash-schema && git checkout -f dev && git clean -fd",
+              "expected": "Clean worktree"
+            },
+            {
+              "action": "implement",
+              "description": "Add test verifying Instance.directory not in shell tool schema",
+              "file": "packages/opencode/test/tool/shell.test.ts",
+              "code": "test('tool schema does not contain Instance.directory for stable cache hash', async () => {\n  await Instance.provide({\n    directory: projectRoot,\n    fn: async () => {\n      const shell = await ShellTool.init()\n      expect(shell.description).not.toContain(Instance.directory)\n      const schema = JSON.stringify(shell.parameters)\n      expect(schema).not.toContain(Instance.directory)\n    },\n  })\n})"
+            },
+            {
+              "action": "bash",
+              "description": "Run shell tests",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-2-bash-schema/packages/opencode && bun test test/tool/shell.test.ts",
+              "expected": "Tests pass"
+            },
+            {
+              "action": "bash",
+              "description": "Commit with co-author attribution",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-2-bash-schema && git add -A && git commit -m 'fix(cache): remove cwd from bash tool schema for cross-repo cache hits' --author='Bhagirathsinh Vaghela <bhagirathsinh.vaghela.001@gmail.com>'",
+              "expected": "Commit created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "PR-3: System Prompt Split",
+      "tasks": [
+        {
+          "id": "T3",
+          "name": "Manually apply system split changes (8 files)",
+          "depends_on": ["T0"],
+          "files": {
+            "create": [],
+            "modify": [
+              "packages/opencode/src/session/instruction.ts",
+              "packages/opencode/src/session/system.ts",
+              "packages/opencode/src/session/prompt.ts",
+              "packages/opencode/src/session/llm.ts",
+              "packages/opencode/src/skill/index.ts",
+              "packages/opencode/test/provider/transform.test.ts",
+              "packages/opencode/test/session/instruction.test.ts",
+              "packages/opencode/test/session/system.test.ts"
+            ]
+          },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Reset worktree to clean dev",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-3-system-split && git checkout -f dev && git clean -fd",
+              "expected": "Clean worktree"
+            },
+            {
+              "action": "bash",
+              "description": "Apply instruction.ts changes: split into global/project",
+              "command": "# Apply diff from fba2aad6a adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Apply system.ts changes: split skills into global/project",
+              "command": "# Apply diff from fba2aad6a adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Apply prompt.ts changes: build system array with systemSplit",
+              "command": "# Apply diff from fba2aad6a adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Apply llm.ts changes: split system blocks + splitSystemPrompt option",
+              "command": "# Apply diffs from fba2aad6a + 2e02781f4 adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Apply skill/index.ts changes: pass scope through",
+              "command": "# Apply diff from fba2aad6a adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Update tests",
+              "command": "# Apply test diffs from fba2aad6a adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Run session and provider tests",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-3-system-split/packages/opencode && bun test test/session/instruction.test.ts test/session/system.test.ts test/provider/transform.test.ts",
+              "expected": "Tests pass"
+            },
+            {
+              "action": "bash",
+              "description": "Commit with co-author attribution",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-3-system-split && git add -A && git commit -m 'fix(cache): split system prompt and skills into stable/dynamic blocks for independent caching' --author='Bhagirathsinh Vaghela <bhagirathsinh.vaghela.001@gmail.com>'",
+              "expected": "Commit created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "name": "PR-4: Cache Stabilization",
+      "tasks": [
+        {
+          "id": "T4",
+          "name": "Apply cache stabilization changes",
+          "depends_on": ["T3"],
+          "files": {
+            "create": [],
+            "modify": [
+              "packages/opencode/src/flag/flag.ts",
+              "packages/opencode/src/session/instruction.ts",
+              "packages/opencode/src/session/system.ts"
+            ]
+          },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Create worktree from PR-3 branch",
+              "command": "cd /Users/martinrichards/code/opencode && git worktree add .worktrees/pr-4-cache-stabilization -b feat/cache-stabilization feat/system-prompt-split",
+              "expected": "Preparing worktree (new tree)"
+            },
+            {
+              "action": "bash",
+              "description": "Apply stabilization changes (flag, instruction.ts, system.ts)",
+              "command": "# Apply diff from 669fda670 adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Run tests",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-4-cache-stabilization/packages/opencode && bun test test/session/instruction.test.ts test/session/system.test.ts",
+              "expected": "Tests pass"
+            },
+            {
+              "action": "bash",
+              "description": "Commit with co-author attribution",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-4-cache-stabilization && git add -A && git commit -m 'fix(cache): stabilize system prefix behind OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION' --author='Bhagirathsinh Vaghela <bhagirathsinh.vaghela.001@gmail.com>'",
+              "expected": "Commit created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "name": "PR-5: Extended Cache TTL",
+      "tasks": [
+        {
+          "id": "T5",
+          "name": "Apply extended TTL changes",
+          "depends_on": ["T3"],
+          "files": {
+            "create": [],
+            "modify": [
+              "packages/opencode/src/flag/flag.ts",
+              "packages/opencode/src/provider/transform.ts",
+              "packages/opencode/test/provider/transform.test.ts"
+            ]
+          },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Create worktree from PR-3 branch",
+              "command": "cd /Users/martinrichards/code/opencode && git worktree add .worktrees/pr-5-cache-ttl -b feat/cache-extended-ttl feat/system-prompt-split",
+              "expected": "Preparing worktree (new tree)"
+            },
+            {
+              "action": "bash",
+              "description": "Apply TTL changes (flag, transform.ts, tests)",
+              "command": "# Apply diff from 3bcde3471 adapted to current dev",
+              "expected": "Changes applied"
+            },
+            {
+              "action": "bash",
+              "description": "Run provider transform tests",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-5-cache-ttl/packages/opencode && bun test test/provider/transform.test.ts",
+              "expected": "Tests pass"
+            },
+            {
+              "action": "bash",
+              "description": "Commit with co-author attribution",
+              "command": "cd /Users/martinrichards/code/opencode/.worktrees/pr-5-cache-ttl && git add -A && git commit -m 'feat(cache): add optional 1h TTL on first system cache marker behind OPENCODE_EXPERIMENTAL_CACHE_1H_TTL flag' --author='Bhagirathsinh Vaghela <bhagirathsinh.vaghela.001@gmail.com>'",
+              "expected": "Commit created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P7",
+      "name": "Validation",
+      "tasks": [
+        {
+          "id": "T6",
+          "name": "Verify co-author attribution on all branches",
+          "depends_on": ["T1", "T2", "T3", "T4", "T5"],
+          "files": { "create": [], "modify": [] },
+          "steps": [
+            {
+              "action": "bash",
+              "description": "Check author on each worktree",
+              "command": "cd /Users/martinrichards/code/opencode && for wt in .worktrees/pr-*; do echo \"=== $wt ===\"; git -C \"$wt\" log dev..HEAD --format=\"%H %an <%ae>\"; done",
+              "expected": "Bhagirathsinh Vaghela listed as author on all commits"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

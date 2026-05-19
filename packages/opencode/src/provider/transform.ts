@@ -443,7 +443,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.api.npm === "@ai-sdk/alibaba") &&
     model.api.npm !== "@ai-sdk/gateway"
   ) {
-    msgs = applyCaching(msgs, model, (options.extendedTTL as boolean) ?? Flag.OPENCODE_EXPERIMENTAL_CACHE_1H_TTL)
+    msgs = applyCaching(msgs, model, (options.extendedTTL as boolean) ?? Flag.OPENCODE_EXPERIMENTAL_CACHE)
   }
 
   // Remap providerOptions keys from stored providerID to expected SDK key

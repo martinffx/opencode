@@ -161,7 +161,7 @@ export const layer: Layer.Layer<
     })
 
     const system = Effect.fn("Instruction.system")(function* () {
-      if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION && _cachedSystem) return _cachedSystem
+      if (Flag.OPENCODE_EXPERIMENTAL_CACHE && _cachedSystem) return _cachedSystem
 
       const config = yield* cfg.get()
       const urls = (config.instructions ?? []).filter(
@@ -191,7 +191,7 @@ export const layer: Layer.Layer<
         ],
       }
 
-      if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION) _cachedSystem = result
+      if (Flag.OPENCODE_EXPERIMENTAL_CACHE) _cachedSystem = result
       return result
     })
 

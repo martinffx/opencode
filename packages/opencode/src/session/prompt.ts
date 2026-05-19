@@ -1424,7 +1424,7 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system: string[] | { stable: string[]; dynamic: string[] } = Flag.OPENCODE_EXPERIMENTAL_SYSTEM_PROMPT_SPLIT
+            const system: string[] | { stable: string[]; dynamic: string[] } = Flag.OPENCODE_EXPERIMENTAL_CACHE
               ? {
                   stable: [...instructions.global, ...(skills.global ? [skills.global] : [])],
                   dynamic: [...env, ...(skills.project ? [skills.project] : []), ...instructions.project],

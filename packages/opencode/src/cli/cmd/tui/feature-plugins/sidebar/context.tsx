@@ -59,7 +59,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
         <text fg={theme().textMuted}>{money.format(cost())} spent</text>
       </box>
-      <Show when={Flag.OPENCODE_EXPERIMENTAL_CACHE_AUDIT && state().cacheHitPercent != null}>
+      <Show when={Flag.OPENCODE_EXPERIMENTAL_CACHE && state().cacheHitPercent != null}>
         <box>
           <text fg={theme().text}><b>Cache Audit</b></text>
           <text fg={theme().textMuted}>{state().totalInputTokens.toLocaleString()} input tokens</text>
