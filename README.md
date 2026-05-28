@@ -43,6 +43,12 @@
 
 ---
 
+### Why Soft Fork?
+
+Upstream has shifted focus to the Desktop app and deep EffectTS refactors, while critical CLI issues like broken prompt caching and day-to-day usability bugs sit unresolved. Pull requests and outside contributions appear to be on hold indefinitely.
+
+I still think opencode is the best AI coding harness out there, so this fork tracks upstream releases and applies focused patches for the CLI-only workflow I actually use.
+
 ### Installation
 
 ```bash
