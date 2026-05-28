@@ -1,0 +1,95 @@
+name: fork-release
+run-name: "fork-release ${{ github.ref_name }}"
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      full_version: ${{ steps.version.outputs.full_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-depth: 0
+
+      - id: version
+        run: |
+          VERSION=$(jq -r '.version' packages/opencode/package.json)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          FULL_VERSION="${VERSION}-${SHORT_SHA}"
+          TAG="v${FULL_VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "full_version=${FULL_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --draft \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes "Fork release of opencode CLI.
+
+          Tracking upstream **v${{ steps.version.outputs.version }}**
+          Fork commit: ${{ github.sha }}"
+
+  build-cli:
+    needs: version
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        id: build
+        run: |
+          ./packages/opencode/script/build.ts --skip-embed-web-ui
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.full_version }}
+          OPENCODE_RELEASE: "true"
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli
+          path: |
+            packages/opencode/dist/opencode-darwin*
+            packages/opencode/dist/opencode-linux*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-windows
+          path: packages/opencode/dist/opencode-windows*
+
+  publish-release:
+    needs:
+      - version
+      - build-cli
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${{ needs.version.outputs.tag }}" --draft=false
